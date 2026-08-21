@@ -1,0 +1,12 @@
+# CAD exports
+out/
+*.stl
+*.step
+*.stp
+*.3mf
+*.png
+
+# FreeCAD
+*.FCStd
+*.FCStd1
+__pycache__/

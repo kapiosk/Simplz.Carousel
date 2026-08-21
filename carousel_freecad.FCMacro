@@ -1,0 +1,507 @@
+# -*- coding: utf-8 -*-
+# =============================================================================
+#  CAKE CAROUSEL  --  FreeCAD / OpenCascade build of the mechanism
+# =============================================================================
+#  Same design, same numbers and the same involute maths as carousel.scad; this
+#  version builds real BRep solids, so you get exact circles and STEP output.
+#
+#  Run it either way:
+#    * FreeCAD GUI:  Macro -> Macros... -> carousel_freecad.FCMacro -> Execute
+#    * head-less:    freecadcmd carousel_freecad.FCMacro
+#
+#  Configure with environment variables (all optional):
+#    CAROUSEL_PART=assembly|print_plate|base|skirt|rotor|adapter|retainer|
+#                  pinion|canopy|pole|finial|crank|hanger
+#    CAROUSEL_BASE_STYLE=printed|turntable      CAROUSEL_DRIVE=thumbwheel|nema17
+#    CAROUSEL_SECTORS=0|2|3|4                   CAROUSEL_SECTOR_INDEX=0..3
+#    CAROUSEL_DEMO_ANGLE=<deg>                  CAROUSEL_EXPORT=<directory>
+#
+#  e.g.  CAROUSEL_PART=rotor CAROUSEL_EXPORT=./stl freecadcmd carousel_freecad.FCMacro
+# =============================================================================
+import math
+import os
+
+import FreeCAD as App
+import Part
+from FreeCAD import Vector
+
+# --------------------------------------------------------------- settings ---
+def _env(key, default):
+    return os.environ.get("CAROUSEL_" + key, default)
+
+PART         = _env("PART", "assembly")
+BASE_STYLE   = _env("BASE_STYLE", "printed")     # printed | turntable
+DRIVE        = _env("DRIVE", "thumbwheel")       # thumbwheel | nema17
+SECTORS      = int(_env("SECTORS", "0"))         # 0 = one piece
+SECTOR_INDEX = int(_env("SECTOR_INDEX", "0"))
+SPLIT_ROT    = float(_env("SPLIT_ROT", "28"))
+DEMO_ANGLE   = float(_env("DEMO_ANGLE", "0"))
+EXPORT_DIR   = _env("EXPORT", "")
+
+# ------------------------------------------------------------- parameters ---
+# Keep these in step with the corresponding variables in carousel.scad.
+gear_module    = 2.0
+rotor_teeth    = 93
+pinion_teeth   = 14
+pressure_angle = 20.0
+backlash       = 0.30
+rotor_add      = 0.85      # wheel addendum factor (tip relief, see asserts)
+pinion_add     = 1.00
+
+plate_t = 6.0
+rotor_t = 6.0
+
+ball_dia     = 6.0
+race_r       = 78.0
+ball_count   = 40
+groove_depth = 1.8
+retainer_t   = 2.0
+
+hub_r   = 12.0     # the rotor's bore turns on this post
+peg_dia = 8.0      # finial spigot
+
+base_r     = 110.0
+skirt_wall = 4.0
+skirt_pegs = 7
+peg_d      = 4.0
+vent_dia   = 12.0
+vent_count = 12
+
+pole_count   = 8
+pole_r       = 84.0
+pole_dia     = 6.0
+pole_len     = 160.0
+socket_depth = 4.0
+canopy_r     = 90.0
+canopy_rise  = 80.0
+canopy_wall  = 4.3
+canopy_grip  = 8.0
+eave_h       = 12.0
+
+platform_dia    = 130.0    # bought turntable platform
+platform_h      = 30.0
+adapter_t       = 6.0
+platform_recess = 3.0
+
+dowel_dia = 3.0
+fit       = 0.25
+
+# ---------------------------------------------------------------- derived ---
+rotor_r     = gear_module * (rotor_teeth / 2.0 + rotor_add)
+pinion_tip  = gear_module * (pinion_teeth / 2.0 + pinion_add)
+center_dist = gear_module * (rotor_teeth + pinion_teeth) / 2.0
+ratio       = rotor_teeth / float(pinion_teeth)
+
+pod_r   = 26.0 if DRIVE == "nema17" else 22.0
+skirt_h = 34.0 if DRIVE == "nema17" else 20.0
+nema_bolt, nema_pilot, nema_shaft = 31.0, 22.0, 5.0
+
+ball_z    = plate_t + ball_dia / 2.0 - groove_depth
+rotor_z   = ball_z + ball_dia / 2.0 - groove_depth
+rotor_top = rotor_z + rotor_t
+hub_top   = rotor_top - 0.3        # flush, so a cake board sits right on top
+
+# top face of whatever rotates: this is where the cake board goes
+plate_top = (platform_h + adapter_t - platform_recess
+             if BASE_STYLE == "turntable" else rotor_top)
+
+pinion_boss_h = rotor_z - plate_t - 0.2
+pinion_gear_h = rotor_top + 2.0 - (plate_t + pinion_boss_h)
+knob_dia, knob_h = 20.0, 11.6
+knob_z = plate_t + pinion_boss_h + pinion_gear_h
+
+pole_z   = plate_top - socket_depth
+canopy_z = pole_z + pole_len - canopy_grip
+
+# =============================================================================
+#  Involute gear geometry -- the same formulae as carousel.scad
+# =============================================================================
+def cosd(a): return math.cos(math.radians(a))
+def sind(a): return math.sin(math.radians(a))
+
+def inv_ang(rb, r):
+    """Polar angle (deg) swept by an involute of base radius rb out to r."""
+    a = math.acos(min(1.0, rb / r))
+    return math.degrees(math.tan(a) - a)
+
+def flank(n, m, pa, bl, r):
+    """Half tooth angle at radius r; the tooth narrows as r grows."""
+    rp = m * n / 2.0
+    rb = rp * cosd(pa)
+    return (90.0 / n - math.degrees((bl / 2.0) / rp)
+            + inv_ang(rb, rp) - inv_ang(rb, r))
+
+def gear_points(n, m, pa=20.0, bl=0.0, add=1.0, steps=8):
+    rp = m * n / 2.0
+    rb = rp * cosd(pa)
+    ro = rp + add * m
+    rr = max(0.6, rp - 1.25 * m)
+    rs = max(rb + 0.02, rr)
+    a0 = flank(n, m, pa, bl, rs)
+    a1 = flank(n, m, pa, bl, ro)
+    pitch = 360.0 / n
+    pol = lambda r, a: (r * cosd(a), r * sind(a))
+    pts = []
+    for k in range(n):
+        o = k * pitch
+        if rs > rr + 0.02:
+            pts.append(pol(rr, o - a0))
+        for i in range(steps + 1):                       # trailing flank
+            r = rs + (ro - rs) * i / float(steps)
+            pts.append(pol(r, o - flank(n, m, pa, bl, r)))
+        for i in range(1, 4):                            # tip arc
+            pts.append(pol(ro, o - a1 + 2 * a1 * i / 4.0))
+        for i in range(steps, -1, -1):                   # leading flank
+            r = rs + (ro - rs) * i / float(steps)
+            pts.append(pol(r, o + flank(n, m, pa, bl, r)))
+        if rs > rr + 0.02:
+            pts.append(pol(rr, o + a0))
+        for i in range(1, 3):                            # root arc
+            pts.append(pol(rr, o + a0 + (pitch - 2 * a0) * i / 3.0))
+    return pts
+
+def gear_solid(n, h, add, z=0.0):
+    pts = [Vector(x, y, z) for x, y in
+           gear_points(n, gear_module, pressure_angle, backlash, add)]
+    pts.append(pts[0])
+    return Part.Face(Part.Wire(Part.makePolygon(pts).Edges)).extrude(Vector(0, 0, h))
+
+# --------------------------------------------------------- design guards ---
+def tip_reach(n, m, add, pa):
+    rp = m * n / 2.0
+    return math.sqrt((rp + add * m) ** 2 - (rp * cosd(pa)) ** 2)
+
+assert tip_reach(rotor_teeth, gear_module, rotor_add, pressure_angle) \
+    <= center_dist * sind(pressure_angle), \
+    "wheel teeth too tall for this pinion: lower rotor_add or add pinion teeth"
+assert tip_reach(pinion_teeth, gear_module, pinion_add, pressure_angle) \
+    <= center_dist * sind(pressure_angle), "pinion teeth too tall"
+assert center_dist - pinion_tip > gear_module * (rotor_teeth / 2.0 - 1.25), \
+    "pinion tip fouls the wheel's tooth roots"
+assert center_dist - rotor_r > gear_module * (pinion_teeth / 2.0 - 1.25), \
+    "wheel tip fouls the pinion's tooth roots"
+assert flank(rotor_teeth, gear_module, pressure_angle, backlash, rotor_r) > 0.1 \
+    and flank(pinion_teeth, gear_module, pressure_angle, backlash, pinion_tip) > 0.1, \
+    "teeth come to a point: reduce an addendum factor"
+assert center_dist - knob_dia / 2.0 > rotor_r + 1, "thumbwheel fouls the rim"
+assert pod_r > pinion_tip + 3, "drive pod too small for the pinion"
+
+# =============================================================================
+#  Solid helpers
+# =============================================================================
+def cyl(r, h, z=0.0, x=0.0, y=0.0):
+    return Part.makeCylinder(r, h, Vector(x, y, z))
+
+def tube(ri, ro, h, z=0.0):
+    return cyl(ro, h, z).cut(cyl(ri, h + 2.0, z - 1.0))
+
+def fuse(shapes):
+    out = shapes[0]
+    for s in shapes[1:]:
+        out = out.fuse(s)
+    return out.removeSplitter()
+
+def cut(shape, tools):
+    for t in tools:
+        shape = shape.cut(t)
+    return shape
+
+def prism(pts2d, h, z=0.0):
+    pts = [Vector(x, y, z) for x, y in pts2d]
+    pts.append(pts[0])
+    return Part.Face(Part.Wire(Part.makePolygon(pts).Edges)).extrude(Vector(0, 0, h))
+
+def hexagon(dia_across_corners, h, z=0.0, x=0.0, y=0.0):
+    r = dia_across_corners / 2.0
+    return prism([(x + r * cosd(60 * i), y + r * sind(60 * i)) for i in range(6)], h, z)
+
+def hull2(r1, r2, d, h, z=0.0):
+    """Convex hull of two circles: radius r1 at the origin, r2 at (d, 0).
+
+    The common external tangent touches both circles at the same polar angle
+    acos((r1 - r2) / d) -- that is the angle whose cosine puts the far centre at
+    signed distance -r2 from the tangent line, on the same side as the near one.
+    """
+    a = math.degrees(math.acos(max(-1.0, min(1.0, (r1 - r2) / d))))
+    p1 = (r1 * cosd(a), r1 * sind(a))
+    p2 = (d + r2 * cosd(a), r2 * sind(a))
+    band = prism([p1, p2, (p2[0], -p2[1]), (p1[0], -p1[1])], h, z)
+    return fuse([cyl(r1, h, z), cyl(r2, h, z, x=d), band])
+
+def knurled(dia, h, z=0.0, grooves=24):
+    body = cyl(dia / 2.0, h, z)
+    tools = [cyl((2.0 + fit) / 2.0, h + 1.0, z - 0.5,
+                 x=dia / 2.0 * cosd(i * 360.0 / grooves),
+                 y=dia / 2.0 * sind(i * 360.0 / grooves))
+             for i in range(grooves)]
+    return cut(body, tools)
+
+def ball_groove():
+    t = Part.makeTorus(race_r, ball_dia / 2.0 + 0.2)
+    t.translate(Vector(0, 0, ball_z))
+    return t
+
+def radial_cyl(r, length, at_r, ang, z):
+    """Cylinder lying in the XY plane, axis pointing outward at `ang`."""
+    d = Vector(cosd(ang), sind(ang), 0)
+    start = Vector(at_r * cosd(ang), at_r * sind(ang), z) - d * (length / 2.0)
+    return Part.makeCylinder(r, length, start, d)
+
+def split_shape(shape, r_max, z):
+    """Cut a big disc into SECTORS printable pieces, dowelled at every joint."""
+    if SECTORS <= 1:
+        return shape
+    step = 360.0 / SECTORS
+    dowels = []
+    for k in range(SECTORS):
+        ang = SPLIT_ROT + k * step
+        tang = Vector(-sind(ang), cosd(ang), 0)
+        for rr in (0.45 * r_max, 0.82 * r_max):
+            centre = Vector(rr * cosd(ang), rr * sind(ang), z)
+            dowels.append(Part.makeCylinder((dowel_dia + 0.3) / 2.0, 30.0,
+                                            centre - tang * 15.0, tang))
+    shape = shape.cut(fuse(dowels))
+    pie = Part.makeCylinder(r_max, 1000.0, Vector(0, 0, 0), Vector(0, 0, 1), step)
+    pie.Placement = App.Placement(Vector(0, 0, -400.0),
+                                  App.Rotation(Vector(0, 0, 1),
+                                               SPLIT_ROT + SECTOR_INDEX * step))
+    return shape.common(pie)
+
+# =============================================================================
+#  Parts -- all built in assembly coordinates
+# =============================================================================
+def base():
+    shape = fuse([cyl(base_r, plate_t), cyl(pod_r, plate_t, x=center_dist),
+                  cyl(hub_r, hub_top)])
+    tools = [ball_groove(),
+             tube(hub_r + 8.0, race_r - 12.0, 2.6, plate_t - 2.5 + 0.01)]
+    tools += [cyl((peg_d + 0.3) / 2.0, 4.6, -0.01,                # skirt pegs
+                  x=(base_r - skirt_wall / 2.0) * cosd(i * 360.0 / (skirt_pegs + 1)),
+                  y=(base_r - skirt_wall / 2.0) * sind(i * 360.0 / (skirt_pegs + 1)))
+              for i in range(1, skirt_pegs + 1)]
+    if DRIVE == "thumbwheel":
+        tools += [cyl(4.3 / 2.0, plate_t + 2.0, -1.0, x=center_dist),
+                  hexagon(8.1, 3.2, -0.01, x=center_dist)]
+    else:
+        tools += [cyl((nema_shaft + 1.5) / 2.0, plate_t + 2.0, -1.0, x=center_dist),
+                  cyl((nema_pilot + 1.0) / 2.0, 2.5, -0.01, x=center_dist)]
+        tools += [cyl(3.3 / 2.0, plate_t + 2.0, -1.0,
+                      x=center_dist + sx * nema_bolt / 2.0, y=sy * nema_bolt / 2.0)
+                  for sx in (-1, 1) for sy in (-1, 1)]
+    return split_shape(cut(shape, tools), 140.0, plate_t / 2.0)
+
+
+def skirt():
+    """Separate ring: both it and the base plate then print flat, no bridging.
+    The gap at the drive pod clears the stepper (or the M4 nut)."""
+    pegs = [cyl(peg_d / 2.0, 4.5, skirt_h - 0.5,
+                x=(base_r - skirt_wall / 2.0) * cosd(i * 360.0 / (skirt_pegs + 1)),
+                y=(base_r - skirt_wall / 2.0) * sind(i * 360.0 / (skirt_pegs + 1)))
+            for i in range(1, skirt_pegs + 1)]
+    shape = fuse([tube(base_r - skirt_wall, base_r, skirt_h)] + pegs)
+    tools = [cyl(32.0, skirt_h + 2.0, -1.0, x=center_dist)]
+    tools += [radial_cyl(vent_dia / 2.0, skirt_wall + 6.0, base_r,
+                         i * 360.0 / vent_count, skirt_h / 2.0)
+              for i in range(vent_count)]
+    return cut(shape, tools)
+
+def rotor():
+    shape = gear_solid(rotor_teeth, rotor_t, rotor_add, rotor_z)
+    tools = [cyl(hub_r + fit, rotor_t + 2.0, rotor_z - 1.0),
+             ball_groove(),
+             tube(hub_r + 8.0, 60.0, 2.5, rotor_z - 0.01)]
+    tools += [cyl((pole_dia + 0.4) / 2.0, socket_depth + 1.0, pole_z,
+                  x=pole_r * cosd(i * 360.0 / pole_count),
+                  y=pole_r * sind(i * 360.0 / pole_count))
+              for i in range(pole_count)]
+    return split_shape(cut(shape, tools), rotor_r + 2.0, rotor_z + rotor_t / 2.0)
+
+def adapter():
+    """Used instead of base/skirt/rotor/retainer/pinion on a bought turntable."""
+    shape = cyl(rotor_r, adapter_t)
+    tools = [cyl((platform_dia + 1.0) / 2.0, platform_recess, -0.01)]
+    tools += [cyl((pole_dia + 0.4) / 2.0, socket_depth + 1.0, adapter_t - socket_depth,
+                  x=pole_r * cosd(i * 360.0 / pole_count),
+                  y=pole_r * sind(i * 360.0 / pole_count))
+              for i in range(pole_count)]
+    tools += [cyl(6.0, 1.2, -0.01,
+                  x=(platform_dia / 2.0 - 12.0) * cosd(45 + i * 90),
+                  y=(platform_dia / 2.0 - 12.0) * sind(45 + i * 90))
+              for i in range(4)]
+    return split_shape(cut(shape, tools), rotor_r + 2.0, adapter_t / 2.0)
+
+def retainer():
+    shape = tube(race_r - 6.0, race_r + 6.0, retainer_t)
+    tools = [cyl((ball_dia + 0.6) / 2.0, retainer_t + 1.0, -0.5,
+                 x=race_r * cosd(i * 360.0 / ball_count),
+                 y=race_r * sind(i * 360.0 / ball_count))
+             for i in range(ball_count)]
+    return cut(shape, tools)
+
+def pinion():
+    bore = nema_shaft + 0.15 if DRIVE == "nema17" else 4.35
+    shape = fuse([cyl(6.0, pinion_boss_h, plate_t),
+                  gear_solid(pinion_teeth, pinion_gear_h, pinion_add,
+                             plate_t + pinion_boss_h),
+                  knurled(knob_dia, knob_h, knob_z)])
+    tools = [cyl(bore / 2.0, knob_z + knob_h + 2.0, plate_t - 1.0)]
+    if DRIVE == "thumbwheel":
+        tools.append(cyl(8.6 / 2.0, 5.0, knob_z + knob_h - 4.0))
+    else:
+        tools.append(Part.makeCylinder(2.9 / 2.0, knob_dia / 2.0 + 1.0,
+                                       Vector(0, 0, knob_z + 2.5), Vector(1, 0, 0)))
+    return cut(shape, tools)
+
+def canopy():
+    shell = Part.makeCone(canopy_r, 8.0, canopy_rise, Vector(0, 0, canopy_z))
+    void = Part.makeCone(canopy_r - canopy_wall, 2.0, canopy_rise - 3.0,
+                         Vector(0, 0, canopy_z - 0.01))
+    parts = [shell.cut(void), cyl(9.0, canopy_rise - 2.0, canopy_z),
+             tube(pole_r - 6.0, canopy_r, eave_h, canopy_z)]
+    tools = [cyl((pole_dia + 0.4) / 2.0, canopy_grip + 1.0, canopy_z - 1.0,
+                 x=pole_r * cosd(i * 360.0 / pole_count),
+                 y=pole_r * sind(i * 360.0 / pole_count))
+             for i in range(pole_count)]
+    tools.append(cyl((peg_dia + fit) / 2.0, 14.0, canopy_z + canopy_rise - 12.0))
+    return split_shape(cut(fuse(parts), tools), canopy_r + 2.0, canopy_z + 4.0)
+
+def pole():
+    return fuse([Part.makeCone((pole_dia - 1.2) / 2.0, pole_dia / 2.0, 0.6),
+                 cyl(pole_dia / 2.0, pole_len - 1.2, 0.6),
+                 Part.makeCone(pole_dia / 2.0, (pole_dia - 1.2) / 2.0, 0.6,
+                               Vector(0, 0, pole_len - 0.6))])
+
+def finial():
+    return fuse([cyl(peg_dia / 2.0, 10.0),
+                 Part.makeCone(8.0, 6.0, 6.0, Vector(0, 0, 10.0)),
+                 Part.makeSphere(9.0, Vector(0, 0, 16.0)),
+                 Part.makeCone(5.0, 0.8, 22.0, Vector(0, 0, 24.0))])
+
+def crank(arm=60.0):
+    shape = fuse([hull2((knob_dia + 8.0) / 2.0, 8.0, arm, 10.0),
+                  cyl(4.5, 16.0, 10.0, x=arm),
+                  Part.makeCone(6.5, 5.0, 3.0, Vector(arm, 0, 26.0))])
+    return shape.cut(knurled(knob_dia + 2 * fit, 8.0, -0.01))
+
+def hanger():
+    body = fuse([hull2((pole_dia + 5.0) / 2.0, 2.5, 12.0, 6.0),
+                 cyl(1.5, 9.0, -8.0, x=12.0),
+                 Part.makeSphere(2.25, Vector(12.0, 0, -9.5))])
+    tools = [cyl((pole_dia + 0.35) / 2.0, 8.0, -1.0),
+             Part.makeBox(20.0, 3.0, 8.0, Vector(-20.0, -1.5, -1.0))]
+    return cut(body, tools)
+
+PARTS = {"base": base, "skirt": skirt, "rotor": rotor, "adapter": adapter,
+         "retainer": retainer, "pinion": pinion, "canopy": canopy,
+         "pole": pole, "finial": finial, "crank": crank, "hanger": hanger}
+
+# =============================================================================
+#  Assembly / layout / output
+# =============================================================================
+def spun(shape, deg):
+    if deg % 360 == 0:
+        return shape
+    s = shape.copy()
+    s.rotate(Vector(0, 0, 0), Vector(0, 0, 1), deg)
+    return s
+
+def moved(shape, x=0.0, y=0.0, z=0.0):
+    s = shape.copy()
+    s.translate(Vector(x, y, z))
+    return s
+
+def assembly_items():
+    """[(name, shape, (r,g,b)), ...] in final position."""
+    items = []
+    if BASE_STYLE == "printed":
+        pin = spun(pinion(), 180.0 / pinion_teeth - DEMO_ANGLE * ratio)
+        items += [("base", base(), (0.85, 0.85, 0.85)),
+                  ("rotor", spun(rotor(), DEMO_ANGLE), (0.27, 0.51, 0.71)),
+                  ("retainer", moved(retainer(), z=ball_z - retainer_t / 2.0),
+                   (0.75, 0.75, 0.75)),
+                  ("pinion", moved(pin, x=center_dist), (1.0, 0.39, 0.28)),
+                  ("skirt", moved(skirt(), z=-skirt_h), (0.85, 0.85, 0.85))]
+        items += [("ball%02d" % i,
+                   Part.makeSphere(ball_dia / 2.0,
+                                   Vector(race_r * cosd(i * 360.0 / ball_count),
+                                          race_r * sind(i * 360.0 / ball_count),
+                                          ball_z)), (0.6, 0.6, 0.62))
+                  for i in range(ball_count)]
+    else:
+        items.append(("adapter",
+                      spun(moved(adapter(), z=platform_h - platform_recess),
+                           DEMO_ANGLE), (0.27, 0.51, 0.71)))
+    items.append(("canopy", spun(canopy(), DEMO_ANGLE), (1.0, 0.39, 0.28)))
+    p = pole()
+    items += [("pole%d" % i,
+               spun(moved(p, x=pole_r * cosd(i * 360.0 / pole_count),
+                          y=pole_r * sind(i * 360.0 / pole_count), z=pole_z),
+                    DEMO_ANGLE), (0.95, 0.94, 0.88))
+              for i in range(pole_count)]
+    items.append(("finial", moved(finial(), z=canopy_z + canopy_rise - 12.0),
+                  (0.85, 0.65, 0.13)))
+    return items
+
+def print_plate_items():
+    if BASE_STYLE == "printed":
+        items = [("base", base(), (0.85, 0.85, 0.85)),
+                 ("rotor", moved(rotor(), x=300, z=-rotor_z), (0.27, 0.51, 0.71)),
+                 ("retainer", moved(retainer(), x=300, y=260), (0.75, 0.75, 0.75)),
+                 ("pinion", moved(pinion(), y=260, z=-plate_t), (1.0, 0.39, 0.28)),
+                 ("skirt", moved(skirt(), y=280), (0.85, 0.85, 0.85))]
+        if DRIVE == "thumbwheel":
+            items.append(("crank", moved(crank(), x=540, y=220), (1.0, 0.39, 0.28)))
+    else:
+        items = [("adapter", moved(adapter(), x=300), (0.27, 0.51, 0.71))]
+    items += [("canopy", moved(canopy(), x=600, z=-canopy_z), (1.0, 0.39, 0.28)),
+              ("finial", moved(finial(), x=600, y=220), (0.85, 0.65, 0.13))]
+    p = pole()
+    items += [("pole%d" % i, moved(p, x=560 + i * 10, y=300), (0.95, 0.94, 0.88))
+              for i in range(pole_count)]
+    h = hanger()
+    items += [("hanger%d" % i, moved(h, x=480, y=160 + i * 16, z=9.5), (0.6, 0.8, 0.6))
+              for i in range(4)]
+    return items
+
+def report():
+    App.Console.PrintMessage(
+        "Cake carousel: turntable %.1f mm, reduction %.2f:1, overall height %.0f mm\n"
+        % (2 * rotor_r, ratio, canopy_z + canopy_rise + 44))
+    App.Console.PrintMessage(
+        "  base_style=%s drive=%s part=%s sectors=%d\n"
+        % (BASE_STYLE, DRIVE, PART, SECTORS))
+
+def build():
+    report()
+    doc = App.ActiveDocument or App.newDocument("Carousel")
+    if PART == "assembly":
+        items = assembly_items()
+    elif PART == "print_plate":
+        items = print_plate_items()
+    else:
+        if PART not in PARTS:
+            raise ValueError("unknown part %r; pick one of %s"
+                             % (PART, ", ".join(sorted(PARTS))))
+        items = [(PART, PARTS[PART](), (0.7, 0.7, 0.75))]
+
+    objs = []
+    for name, shape, colour in items:
+        obj = doc.addObject("Part::Feature", name)
+        obj.Shape = shape
+        if App.GuiUp:
+            obj.ViewObject.ShapeColor = colour
+        objs.append(obj)
+    doc.recompute()
+
+    if EXPORT_DIR:
+        folder = os.path.abspath(EXPORT_DIR)
+        if not os.path.isdir(folder):
+            os.makedirs(folder)
+        tag = "%s_%s" % (BASE_STYLE, DRIVE)
+        Part.export(objs, os.path.join(folder, "carousel_%s_%s.step" % (PART, tag)))
+        for name, shape, _ in items:
+            shape.exportStl(os.path.join(folder, "%s.stl" % name))
+        App.Console.PrintMessage("exported STEP + STL to %s\n" % folder)
+    return doc
+
+DOC = build()
