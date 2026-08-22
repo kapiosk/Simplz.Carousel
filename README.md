@@ -12,11 +12,30 @@ overall height   286 mm with the finial
 cake it suits    up to Ø 152 mm (6") and ~110 mm tall
 ```
 
+There are **two mechanisms** in this repo, sharing the same upper works (poles,
+canopy, finial) and the same Ø 190 mm platter bolt pattern, so you can build
+either and swap later:
+
+| Mechanism | Drive | Parts | Read |
+|---|---|---|---|
+| **Geared** (this file) | printed ball race, 93:14 gear pair, thumbwheel or NEMA 17 | 8 distinct | below |
+| **Friction** | bought turntable bearing, NEMA 17 with an O-ring tyre, no teeth | 3 distinct | [FRICTION_DRIVE.md](FRICTION_DRIVE.md) |
+
+The friction mechanism exists in three languages — OpenSCAD, FreeCAD and µcad —
+and all three agree on every part's volume to within 0.02 %; see
+[MICROCAD.md](MICROCAD.md).
+
+The friction version is simpler, silent and far less sensitive to print
+tolerances; the geared version needs no bought bearing and looks like a machine.
+
 | File | What it is |
 |---|---|
 | [carousel.scad](carousel.scad) | OpenSCAD model, all parts, assembly and print layout |
 | [carousel_freecad.FCMacro](carousel_freecad.FCMacro) | FreeCAD macro building the same solids with OpenCascade (STEP output) |
 | [BOM.md](BOM.md) | Bill of materials — two versions, ready-made base or NEMA 17 |
+| [friction_drive.scad](friction_drive.scad) / [.FCMacro](friction_drive.FCMacro) / [.µcad](friction_drive.µcad) | The friction mechanism, three implementations |
+| [FRICTION_DRIVE.md](FRICTION_DRIVE.md) | Why friction beats teeth here, plus its own BOM |
+| [MICROCAD.md](MICROCAD.md) | The µcad port: what the language is like, and what bit |
 
 ## How it works
 

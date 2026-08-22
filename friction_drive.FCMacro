@@ -1,0 +1,343 @@
+# -*- coding: utf-8 -*-
+# =============================================================================
+#  CAKE CAROUSEL -- FRICTION DRIVE MECHANISM  (FreeCAD / OpenCascade)
+# =============================================================================
+#  Same design and the same numbers as friction_drive.scad, built as BRep
+#  solids so you get exact circles and STEP output.
+#
+#  Mechanism only: a bought turntable (lazy-susan) bearing carries the load, a
+#  NEMA 17 under the base spins an O-ring tyre against the rim of the platter.
+#  No gear teeth.  Three printed parts: BASE, PLATTER, ROLLER.
+#
+#  Run it either way:
+#    * FreeCAD GUI:  Macro -> Macros... -> friction_drive.FCMacro -> Execute
+#    * head-less:    freecadcmd friction_drive.FCMacro
+#
+#  Environment variables (all optional):
+#    CAROUSEL_PART=assembly|print_plate|base|platter|roller
+#    CAROUSEL_SECTORS=0|2|3|4   CAROUSEL_SECTOR_INDEX=0..3
+#    CAROUSEL_DEMO_ANGLE=<deg>  CAROUSEL_GHOSTS=0|1  CAROUSEL_EXPORT=<dir>
+# =============================================================================
+import math
+import os
+
+import FreeCAD as App
+import Part
+from FreeCAD import Vector
+
+
+def _env(key, default):
+    return os.environ.get("CAROUSEL_" + key, default)
+
+
+PART         = _env("PART", "assembly")
+SECTORS      = int(_env("SECTORS", "0"))
+SECTOR_INDEX = int(_env("SECTOR_INDEX", "0"))
+SPLIT_ROT    = float(_env("SPLIT_ROT", "40"))
+DEMO_ANGLE   = float(_env("DEMO_ANGLE", "0"))
+GHOSTS       = _env("GHOSTS", "1") not in ("0", "false", "no")
+EXPORT_DIR   = _env("EXPORT", "")
+
+# ------------------------------------------------------------- parameters ---
+# Keep these in step with friction_drive.scad.
+platter_dia = 190.0
+platter_t   = 6.0
+rim_drop    = 3.0
+
+with_poles   = True
+pole_count   = 8
+pole_r       = 84.0
+pole_dia     = 6.0
+socket_depth = 4.0
+
+bearing_shape = "square"  # "square" or "round" -- MEASURE YOURS
+bearing_size = 100.0      # side of the square, or diameter if round
+bearing_h    = 8.0
+pocket_depth = 1.5
+pocket_fit   = 0.4
+pilot_dia    = 2.5
+pilot_rs     = [36.0, 42.0, 48.0, 54.0]
+
+base_dia  = 210.0
+base_t    = 6.0
+leg_count = 4
+leg_dia   = 14.0
+leg_h     = 34.0
+leg_r     = 90.0
+
+roller_dia = 20.0
+roller_h   = 12.0
+oring_id   = 16.0
+oring_cs   = 3.0
+squish     = 0.4
+travel     = 12.0
+shaft_dia  = 5.0
+shaft_len  = 21.0
+
+nema_bolt   = 31.0
+nema_pilot  = 22.0
+nema_body   = 42.3
+nema_length = 23.0
+
+fit = 0.25
+
+# ---------------------------------------------------------------- derived ---
+platter_r = platter_dia / 2.0
+base_r    = base_dia / 2.0
+oring_od  = oring_id + 2 * oring_cs
+tyre_r    = oring_od / 2.0
+axis_r    = platter_r + tyre_r - squish
+ratio     = platter_r / (tyre_r - squish / 2.0)
+motor_pad_r = nema_bolt / 2.0 * math.sqrt(2) + travel / 2.0 + 5.0
+
+pocket_sq   = bearing_size + pocket_fit
+# radius the bearing's plates sweep as they turn
+swept_r     = (bearing_size * math.sqrt(2) / 2 if bearing_shape == "square"
+               else bearing_size / 2.0)
+platter_z   = base_t + bearing_h - 2 * pocket_depth
+platter_top = platter_z + platter_t
+band_bot    = platter_z - rim_drop
+roller_z    = band_bot - 1.0
+groove_z    = roller_z + roller_h / 2.0
+
+# ----------------------------------------------------------------- guards ---
+assert platter_r > swept_r + 2, \
+    "platter is too small to cover the bearing's plates as they sweep"
+assert base_r > swept_r + 2, "base is too small for the bearing"
+assert travel > squish + 4, "motor slots are too short to disengage the tyre"
+assert shaft_len > roller_z + roller_h - base_t, \
+    "motor shaft is too short to reach the tyre: shorten roller_h"
+assert roller_dia > oring_id + 1, "roller body is smaller than the O-ring bore"
+assert oring_cs > pocket_fit + 1, "O-ring section too small to grip"
+assert band_bot < groove_z < platter_top, \
+    "tyre does not line up with the platter's drive band"
+assert leg_h > nema_length + 5, "legs are too short: the motor would touch down"
+assert not with_poles or pole_r + pole_dia < platter_r - 2, \
+    "pole sockets are too close to the drive rim"
+
+
+# =============================================================================
+#  Helpers
+# =============================================================================
+def cosd(a): return math.cos(math.radians(a))
+def sind(a): return math.sin(math.radians(a))
+
+
+def cyl(r, h, z=0.0, x=0.0, y=0.0):
+    return Part.makeCylinder(r, h, Vector(x, y, z))
+
+
+def tube(ri, ro, h, z=0.0):
+    return cyl(ro, h, z).cut(cyl(ri, h + 2.0, z - 1.0))
+
+
+def fuse(shapes):
+    out = shapes[0]
+    for s in shapes[1:]:
+        out = out.fuse(s)
+    return out.removeSplitter()
+
+
+def cut(shape, tools):
+    for t in tools:
+        shape = shape.cut(t)
+    return shape
+
+
+def slot(x, y, d, length, h, z=0.0):
+    """Radially elongated hole: a box capped by a cylinder at each end."""
+    ends = [cyl(d / 2.0, h, z, x + s * length / 2.0, y) for s in (-1, 1)]
+    body = Part.makeBox(length, d, h, Vector(x - length / 2.0, y - d / 2.0, z))
+    return fuse(ends + [body])
+
+
+def bearing_pocket(z, h):
+    """Captures the bearing.  A square pocket also takes the drive torque, so
+    the screws are optional; a round bearing can spin in its pocket, so there
+    the screws are what hold it."""
+    if bearing_shape == "square":
+        return Part.makeBox(pocket_sq, pocket_sq, h,
+                            Vector(-pocket_sq / 2.0, -pocket_sq / 2.0, z))
+    return cyl(pocket_sq / 2.0, h, z)
+
+
+def pilot_holes(z, h):
+    return [cyl(pilot_dia / 2.0, h, z, r * cosd(a), r * sind(a))
+            for a in (45, 135, 225, 315) for r in pilot_rs]
+
+
+def split_shape(shape, r_max, z):
+    """Cut a disc into SECTORS printable pieces, dowelled at every joint."""
+    if SECTORS <= 1:
+        return shape
+    step = 360.0 / SECTORS
+    dowels = []
+    for k in range(SECTORS):
+        ang = SPLIT_ROT + k * step
+        tang = Vector(-sind(ang), cosd(ang), 0)
+        for rr in (0.45 * r_max, 0.82 * r_max):
+            centre = Vector(rr * cosd(ang), rr * sind(ang), z)
+            dowels.append(Part.makeCylinder(1.65, 30.0, centre - tang * 15.0, tang))
+    shape = shape.cut(fuse(dowels))
+    pie = Part.makeCylinder(r_max, 1000.0, Vector(0, 0, 0), Vector(0, 0, 1), step)
+    pie.Placement = App.Placement(Vector(0, 0, -400.0),
+                                  App.Rotation(Vector(0, 0, 1),
+                                               SPLIT_ROT + SECTOR_INDEX * step))
+    return shape.common(pie)
+
+
+# =============================================================================
+#  Parts
+# =============================================================================
+def base():
+    legs = [cyl(leg_dia / 2.0, leg_h + 0.5, -leg_h,
+                leg_r * cosd(45 + i * 360.0 / leg_count),
+                leg_r * sind(45 + i * 360.0 / leg_count))
+            for i in range(leg_count)]
+    shape = fuse([cyl(base_r, base_t), cyl(motor_pad_r, base_t, x=axis_r)] + legs)
+
+    tools = [bearing_pocket(base_t - pocket_depth, pocket_depth + 1.0)]
+    tools += pilot_holes(-1.0, base_t + 2.0)
+    # motor: four slots on the bolt square, a shaft slot, a pilot-boss pocket
+    tools += [slot(axis_r + sx * nema_bolt / 2.0, sy * nema_bolt / 2.0,
+                   3.4, travel, base_t + 2.0, -1.0)
+              for sx in (-1, 1) for sy in (-1, 1)]
+    tools += [slot(axis_r, 0, shaft_dia + 2.0, travel, base_t + 2.0, -1.0),
+              slot(axis_r, 0, nema_pilot + 1.5, travel, 2.5, -0.01)]
+    # felt pad recesses in the feet
+    tools += [cyl((leg_dia - 2) / 2.0, 1.0, -leg_h - 0.01,
+                  leg_r * cosd(45 + i * 360.0 / leg_count),
+                  leg_r * sind(45 + i * 360.0 / leg_count))
+              for i in range(leg_count)]
+    # anchor post hole, in case you want a rubber-band preload
+    tools.append(cyl(1.6, base_t + 2.0, -1.0, x=axis_r + motor_pad_r - 6.0))
+    return split_shape(cut(shape, tools), base_r + motor_pad_r, base_t / 2.0)
+
+
+def platter():
+    shape = fuse([cyl(platter_r, platter_t, platter_z),
+                  tube(platter_r - 5.0, platter_r, rim_drop + 0.5, band_bot)])
+    tools = [bearing_pocket(platter_z - 0.01, pocket_depth + 1.0),
+             tube(swept_r + 3.0, platter_r - 12.0, 2.5, platter_z - 0.01)]
+    tools += pilot_holes(platter_z - 1.0, platter_t + 2.0)
+    if with_poles:
+        tools += [cyl((pole_dia + 0.4) / 2.0, socket_depth + 1.0,
+                      platter_top - socket_depth,
+                      pole_r * cosd(i * 360.0 / pole_count),
+                      pole_r * sind(i * 360.0 / pole_count))
+                  for i in range(pole_count)]
+    return split_shape(cut(shape, tools), platter_r + 2.0,
+                       platter_z + platter_t / 2.0)
+
+
+def roller():
+    shape = cyl(roller_dia / 2.0, roller_h)
+    tools = [tube(oring_id / 2.0, roller_dia / 2.0 + 1.0, oring_cs + 0.2,
+                  roller_h / 2.0 - (oring_cs + 0.2) / 2.0),
+             cyl((shaft_dia + 0.15) / 2.0, roller_h + 2.0, -1.0),
+             Part.makeCylinder(2.9 / 2.0, roller_dia, Vector(0, 0, 3.0),
+                               Vector(1, 0, 0))]
+    return cut(shape, tools)
+
+
+PARTS = {"base": base, "platter": platter, "roller": roller}
+
+
+# =============================================================================
+#  Assembly / layout / output
+# =============================================================================
+def spun(shape, deg):
+    if deg % 360 == 0:
+        return shape
+    s = shape.copy()
+    s.rotate(Vector(0, 0, 0), Vector(0, 0, 1), deg)
+    return s
+
+
+def moved(shape, x=0.0, y=0.0, z=0.0):
+    s = shape.copy()
+    s.translate(Vector(x, y, z))
+    return s
+
+
+def ghosts():
+    """[(name, shape)] -- bought parts and the cake, for context only."""
+    def plate(z):
+        if bearing_shape == "square":
+            return Part.makeBox(bearing_size, bearing_size, 1.2,
+                                Vector(-bearing_size / 2.0, -bearing_size / 2.0, z))
+        return cyl(bearing_size / 2.0, 1.2, z)
+    tyre = Part.makeTorus(oring_id / 2.0 + oring_cs / 2.0, oring_cs / 2.0)
+    tyre.translate(Vector(axis_r, 0, groove_z))
+    return [("bearing_lower", plate(base_t - pocket_depth)),
+            ("bearing_upper", plate(platter_z + pocket_depth - 1.2)),
+            ("motor", Part.makeBox(nema_body, nema_body, nema_length,
+                                   Vector(axis_r - nema_body / 2.0,
+                                          -nema_body / 2.0, -nema_length))),
+            ("motor_boss", cyl(nema_pilot / 2.0, 2.0, 0.0, axis_r)),
+            ("motor_shaft", cyl(shaft_dia / 2.0, shaft_len, 0.0, axis_r)),
+            ("tyre", tyre),
+            ("cake", cyl(76.0, 112.0, platter_top))]
+
+
+def assembly_items():
+    items = [("base", base(), (0.85, 0.85, 0.85), 0),
+             ("platter", spun(platter(), DEMO_ANGLE), (0.27, 0.51, 0.71), 0),
+             ("roller", moved(spun(roller(), -DEMO_ANGLE * ratio),
+                              x=axis_r, z=roller_z), (1.0, 0.39, 0.28), 0)]
+    if GHOSTS:
+        items += [(n, s, (0.6, 0.6, 0.62), 70) for n, s in ghosts()]
+    return items
+
+
+def print_plate_items():
+    return [("base", moved(base(), z=leg_h), (0.85, 0.85, 0.85), 0),
+            ("platter", moved(platter(), x=260, z=-band_bot), (0.27, 0.51, 0.71), 0),
+            ("roller", moved(roller(), x=260, y=240), (1.0, 0.39, 0.28), 0)]
+
+
+def report():
+    App.Console.PrintMessage(
+        "Friction drive: platter %.0f mm, reduction %.2f:1, platter top %.1f mm\n"
+        % (platter_dia, ratio, platter_top))
+    App.Console.PrintMessage(
+        "  one motor turn = %.1f deg of cake; 3 rpm cake = %.1f rpm motor\n"
+        % (360.0 / ratio, 3 * ratio))
+
+
+def build():
+    report()
+    doc = App.ActiveDocument or App.newDocument("FrictionDrive")
+    if PART == "assembly":
+        items = assembly_items()
+    elif PART == "print_plate":
+        items = print_plate_items()
+    else:
+        if PART not in PARTS:
+            raise ValueError("unknown part %r; pick one of %s"
+                             % (PART, ", ".join(sorted(PARTS))))
+        items = [(PART, PARTS[PART](), (0.7, 0.7, 0.75), 0)]
+
+    objs = []
+    for name, shape, colour, transparency in items:
+        obj = doc.addObject("Part::Feature", name)
+        obj.Shape = shape
+        if App.GuiUp:
+            obj.ViewObject.ShapeColor = colour
+            obj.ViewObject.Transparency = transparency
+        objs.append(obj)
+    doc.recompute()
+
+    if EXPORT_DIR:
+        folder = os.path.abspath(EXPORT_DIR)
+        if not os.path.isdir(folder):
+            os.makedirs(folder)
+        Part.export(objs, os.path.join(folder, "friction_drive_%s.step" % PART))
+        for name, shape, _, t in items:
+            if t == 0:                       # printed parts only, not the ghosts
+                shape.exportStl(os.path.join(folder, "%s.stl" % name))
+        App.Console.PrintMessage("exported STEP + STL to %s\n" % folder)
+    return doc
+
+
+DOC = build()

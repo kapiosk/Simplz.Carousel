@@ -1,0 +1,263 @@
+// =============================================================================
+//  CAKE CAROUSEL -- FRICTION DRIVE MECHANISM   (µcad 0.5)
+// =============================================================================
+//  A third rendering of the same mechanism as friction_drive.scad and
+//  friction_drive.FCMacro: a bought turntable (lazy-susan) bearing carries the
+//  load, a NEMA 17 under the base spins an O-ring tyre against the rim of the
+//  platter.  No gear teeth.  Three printed parts.
+//
+//  Check, view and export:
+//      microcad check  friction_drive.µcad
+//      microcad watch  friction_drive.µcad
+//      microcad export friction_drive.µcad          // writes the three STLs
+//      microcad export -r 0.05mm friction_drive.µcad
+//
+//  Parts are instantiated where they sit in the assembly, so the render is the
+//  whole mechanism; each STL therefore carries that offset, which slicers
+//  re-centre on load.
+//
+//  Note for µcad 0.5: a comment placed as the FIRST token inside a `( ... )`
+//  group breaks the following operator when the next operand also starts with
+//  `(` -- it reports "Invalid operator: (Operation union()) - Operation
+//  union()".  Comments therefore sit above each group here, never just inside
+//  one.  Minimal reproducer in MICROCAD.md.
+// =============================================================================
+
+use std::geo2d::*;
+use std::geo3d::*;
+use std::ops::*;
+use std::math::*;
+
+// ------------------------------------------------------------- parameters ---
+// Keep these in step with friction_drive.scad.
+const platter_dia = 190mm;
+const platter_t   = 6mm;
+const rim_drop    = 3mm;      // rim flange below the platter: deepens the band
+
+const pole_count   = 8;
+const pole_r       = 84mm;
+const pole_dia     = 6mm;
+const socket_depth = 4mm;
+
+// Turntable bearing -- MEASURE YOURS.  "square" locates on the pocket alone,
+// "round" can spin in its pocket, so there the screws are what hold it.
+const bearing_square = true;
+const bearing_size   = 100mm;
+const bearing_h      = 8mm;
+const pocket_depth   = 1.5mm;
+const pocket_fit     = 0.4mm;
+const pilot_dia      = 2.5mm;
+const pilot_rs       = [36mm, 42mm, 48mm, 54mm];
+
+const base_dia = 210mm;
+const base_t   = 6mm;
+const leg_dia  = 14mm;
+const leg_h    = 34mm;        // must clear the motor hanging underneath
+const leg_r    = 90mm;
+
+const roller_dia = 20mm;
+const roller_h   = 12mm;
+const oring_id   = 16mm;      // nitrile O-ring, 16 x 3 is a stock size
+const oring_cs   = 3mm;
+const squish     = 0.4mm;     // how far the tyre is crushed at the rim
+const travel     = 12mm;      // adjustment range of the motor slots
+const shaft_dia  = 5mm;
+const shaft_len  = 21mm;      // NEMA 17 pancake, from the motor face
+
+const nema_bolt  = 31mm;
+const nema_pilot = 22mm;
+
+// ---------------------------------------------------------------- derived ---
+const platter_r = platter_dia / 2;
+const base_r    = base_dia / 2;
+const tyre_r    = (oring_id + 2 * oring_cs) / 2;
+const axis_r    = platter_r + tyre_r - squish;      // motor axis, nominal
+const ratio     = platter_r / (tyre_r - squish / 2);
+const motor_pad_r = nema_bolt / 2 * sqrt(2.0) + travel / 2 + 5mm;
+
+const pocket_sq   = bearing_size + pocket_fit;
+// Radius the bearing's plates sweep as they turn.  µcad 0.5 has no conditional
+// *value* (an `if` yields geometry), so this takes the square case, which is the
+// larger of the two -- a safe guard for a round bearing as well.
+const swept_r     = bearing_size / 2 * sqrt(2.0);
+const platter_z   = base_t + bearing_h - 2 * pocket_depth;
+const platter_top = platter_z + platter_t;
+const band_bot    = platter_z - rim_drop;
+const roller_z    = band_bot - 1mm;
+const groove_z    = roller_z + roller_h / 2;
+
+const pole_angles = [0..pole_count - 1] * (360° / pole_count);
+const leg_angles  = [0..3] * 90° + 45°;
+const diagonals   = [45°, 135°, 225°, 315°];
+
+std::print("platter {platter_dia}, reduction {ratio}:1, platter top {platter_top}");
+
+// ----------------------------------------------------------------- guards ---
+std::debug::assert(platter_r > swept_r + 2mm,
+    "platter is too small to cover the bearing's plates as they sweep");
+std::debug::assert(base_r > swept_r + 2mm, "base is too small for the bearing");
+std::debug::assert(travel > squish + 4mm,
+    "motor slots are too short to disengage the tyre");
+std::debug::assert(shaft_len > roller_z + roller_h - base_t,
+    "motor shaft is too short to reach the tyre: shorten roller_h");
+std::debug::assert(roller_dia > oring_id + 1mm,
+    "roller body is smaller than the O-ring bore");
+std::debug::assert(groove_z > band_bot,
+    "tyre sits below the platter's drive band");
+std::debug::assert(groove_z < platter_top,
+    "tyre sits above the platter's drive band");
+std::debug::assert(leg_h > 28mm, "legs are too short: the motor would touch down");
+std::debug::assert(pole_r + pole_dia < platter_r - 2mm,
+    "pole sockets are too close to the drive rim");
+
+// =============================================================================
+//  Helpers
+// =============================================================================
+/// Footprint of the bearing's stamped plate: square, or round if you bought one.
+sketch BearingFootprint(size: Length) {
+    if bearing_square { Rect(size) } else { Circle(radius = size / 2) }
+}
+
+/// A radially elongated hole, centred on the origin: the motor's slots.
+part Slot(dia: Length, length: Length, bottom: Length, top: Length) {
+    (Cylinder(radius = dia / 2, bottom, top).translate(x = [-length / 2, length / 2])).hull()
+}
+
+/// A tube, from z = bottom to z = top.
+///
+/// Built from two circles rather than std's `Ring`, whose several `init` forms
+/// make `Ring(outer_radius, inner_radius)` ambiguous in µcad 0.5.
+part Tube(inner_radius: Length, outer_radius: Length, bottom: Length, top: Length) {
+    (Circle(radius = outer_radius) - Circle(radius = inner_radius))
+        .extrude(top - bottom)
+        .translate(z = bottom)
+}
+
+/// Seat that captures one of the bearing's stamped plates.
+part BearingSeat(z: Length) {
+    BearingFootprint(pocket_sq).extrude(pocket_depth + 1mm).translate(z)
+}
+
+/// Pilot holes on the diagonals, for the optional bearing screws. Four radii:
+/// use whichever pair lines up with the holes in your bearing.
+part PilotHoles(bottom: Length, top: Length) {
+    Cylinder(radius = pilot_dia / 2, bottom, top)
+        .translate(distance = pilot_rs, angle = diagonals)
+}
+
+// =============================================================================
+//  Base
+// =============================================================================
+/// Plate with a lobe carrying the motor.
+part BasePlate() {
+    (Circle(radius = base_r) | Circle(radius = motor_pad_r, center = (x = axis_r, y = 0mm)))
+        .extrude(base_t)
+}
+
+/// Four legs, tall enough to clear the motor hanging underneath.
+part Legs() {
+    Cylinder(radius = leg_dia / 2, bottom = -leg_h, top = 0.5mm)
+        .translate(distance = leg_r, angle = leg_angles)
+}
+
+/// Shallow recess in each foot for a self-adhesive felt pad.
+part PadRecesses() {
+    Cylinder(radius = (leg_dia - 2mm) / 2, bottom = -leg_h - 0.01mm, top = -leg_h + 1mm)
+        .translate(distance = leg_r, angle = leg_angles)
+}
+
+/// The motor's four adjustment slots on the bolt square, the slot its shaft
+/// passes through, and the pocket clearing its pilot boss. Sliding the motor
+/// along the slots is what sets the tyre's squeeze against the rim.
+part MotorCutouts() {
+    Slot(dia = 3.4mm, length = travel, bottom = -1mm, top = base_t + 1mm)
+        .translate(x = [axis_r - nema_bolt / 2, axis_r + nema_bolt / 2],
+                   y = [-nema_bolt / 2, nema_bolt / 2])
+    | Slot(dia = shaft_dia + 2mm, length = travel, bottom = -1mm, top = base_t + 1mm)
+        .translate(x = axis_r)
+    | Slot(dia = nema_pilot + 1.5mm, length = travel, bottom = -0.01mm, top = 2.5mm)
+        .translate(x = axis_r)
+}
+
+/// Hole for an anchor post, in case you want to add a rubber-band preload.
+part AnchorHole() {
+    Cylinder(radius = 1.6mm, bottom = -1mm, top = base_t + 1mm)
+        .translate(x = axis_r + motor_pad_r - 6mm)
+}
+
+part Base() {
+    (BasePlate() | Legs()) - (
+        BearingSeat(z = base_t - pocket_depth)
+        | PilotHoles(bottom = -1mm, top = base_t + 1mm)
+        | MotorCutouts()
+        | PadRecesses()
+        | AnchorHole()
+    )
+}
+
+// =============================================================================
+//  Platter
+// =============================================================================
+/// The disc, with a rim flange that deepens the drive band to 9 mm.
+part PlatterBlank() {
+    Cylinder(radius = platter_r, bottom = platter_z, top = platter_top)
+    | Tube(inner_radius = platter_r - 5mm, outer_radius = platter_r,
+           bottom = band_bot, top = platter_z + 0.5mm)
+}
+
+/// Weight off the middle, keeping the bearing seat and the rim solid.
+part Lightening() {
+    Tube(inner_radius = swept_r + 3mm, outer_radius = platter_r - 12mm,
+         bottom = platter_z - 0.01mm, top = platter_z + 2.5mm)
+}
+
+/// Eight sockets on the same ring as carousel.scad's rotor, so the canopy,
+/// poles and finial from the geared design drop straight on.
+part PoleSockets() {
+    Cylinder(radius = (pole_dia + 0.4mm) / 2,
+             bottom = platter_top - socket_depth, top = platter_top + 1mm)
+        .translate(distance = pole_r, angle = pole_angles)
+}
+
+part Platter() {
+    PlatterBlank() - (
+        BearingSeat(z = platter_z - 0.01mm)
+        | PilotHoles(bottom = platter_z - 1mm, top = platter_top + 1mm)
+        | Lightening()
+        | PoleSockets()
+    )
+}
+
+// =============================================================================
+//  Roller
+// =============================================================================
+/// Groove for the O-ring. The tyre stands proud of the body, so only rubber
+/// ever touches the platter.
+part TyreGroove() {
+    Tube(inner_radius = oring_id / 2, outer_radius = roller_dia / 2 + 1mm,
+         bottom = roller_h / 2 - (oring_cs + 0.2mm) / 2,
+         top = roller_h / 2 + (oring_cs + 0.2mm) / 2)
+}
+
+/// Shaft bore, and an M3 grub screw onto the shaft.
+part RollerBore() {
+    Cylinder(radius = (shaft_dia + 0.15mm) / 2, bottom = -1mm, top = roller_h + 1mm)
+    | Cylinder(radius = 1.45mm, bottom = 0mm, top = roller_dia).rotate(90°, Y).translate(z = 3mm)
+}
+
+part Roller() {
+    Cylinder(radius = roller_dia / 2, bottom = 0mm, top = roller_h)
+        - (TyreGroove() | RollerBore())
+}
+
+// =============================================================================
+//  Output: the assembly, and one STL per printed part
+// =============================================================================
+#[export("friction_base.stl")]
+Base();
+
+#[export("friction_platter.stl")]
+Platter();
+
+#[export("friction_roller.stl")]
+Roller().translate(x = axis_r, z = roller_z);
