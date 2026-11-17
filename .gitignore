@@ -10,3 +10,7 @@ out/
 *.FCStd
 *.FCStd1
 __pycache__/
+
+# backups the CAD tools write when a file is overwritten
+*.blend1
+*.bak

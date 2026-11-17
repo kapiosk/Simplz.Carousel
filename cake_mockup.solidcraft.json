@@ -2,7 +2,7 @@
   "about": {
     "design": "cake_mockup",
     "format": "solidcraft/58",
-    "note": "Command script, NOT a design document. Replay it with:  solidcraft-cli run cake_mockup.solidcraft.json --save cake_mockup.sc   -- to open the model in the SolidCraft GUI, open cake_mockup.sc instead.",
+    "note": "Command script (every size is a DIAMETER), NOT a design document. Replay it with:  solidcraft-cli run cake_mockup.solidcraft.json --save cake_mockup.sc   -- to open the model in the SolidCraft GUI, open cake_mockup.sc instead.",
     "replay": "solidcraft-cli run cake_mockup.solidcraft.json",
     "version": "0.44.1"
   },
@@ -10,7 +10,7 @@
     {
       "command": "parameters.add",
       "params": {
-        "name": "plinth_r",
+        "name": "plinth_d",
         "expression": "300 mm"
       }
     },
@@ -31,7 +31,7 @@
     {
       "command": "parameters.add",
       "params": {
-        "name": "tier1_r",
+        "name": "tier1_d",
         "expression": "220 mm"
       }
     },
@@ -45,7 +45,7 @@
     {
       "command": "parameters.add",
       "params": {
-        "name": "tier2_r",
+        "name": "tier2_d",
         "expression": "180 mm"
       }
     },
@@ -59,7 +59,7 @@
     {
       "command": "parameters.add",
       "params": {
-        "name": "carousel_r",
+        "name": "carousel_d",
         "expression": "150 mm"
       }
     },
@@ -73,7 +73,7 @@
     {
       "command": "parameters.add",
       "params": {
-        "name": "column_r",
+        "name": "column_d",
         "expression": "30 mm"
       }
     },
@@ -87,7 +87,7 @@
     {
       "command": "parameters.add",
       "params": {
-        "name": "brim_r",
+        "name": "brim_d",
         "expression": "150 mm"
       }
     },
@@ -101,7 +101,7 @@
     {
       "command": "parameters.add",
       "params": {
-        "name": "roof_r",
+        "name": "roof_d",
         "expression": "150 mm"
       }
     },
@@ -157,7 +157,6 @@
     {
       "command": "solid.cylinder",
       "params": {
-        "radius": "plinth_r",
         "height": "plinth_h",
         "base": [
           0,
@@ -167,7 +166,8 @@
         "axis": "Z",
         "operation": "new",
         "name": "Plinth",
-        "body_name": "plinth"
+        "body_name": "plinth",
+        "diameter": "plinth_d"
       }
     },
     {
@@ -182,7 +182,6 @@
     {
       "command": "solid.cylinder",
       "params": {
-        "radius": "tier1_r",
         "height": "tier1_h",
         "base": [
           "cake_offset",
@@ -192,7 +191,8 @@
         "axis": "Z",
         "operation": "new",
         "name": "Cake tier 1",
-        "body_name": "tier1"
+        "body_name": "tier1",
+        "diameter": "tier1_d"
       }
     },
     {
@@ -207,7 +207,6 @@
     {
       "command": "solid.cylinder",
       "params": {
-        "radius": "tier2_r",
         "height": "tier2_h",
         "base": [
           "cake_offset",
@@ -217,7 +216,8 @@
         "axis": "Z",
         "operation": "new",
         "name": "Cake tier 2",
-        "body_name": "tier2"
+        "body_name": "tier2",
+        "diameter": "tier2_d"
       }
     },
     {
@@ -232,7 +232,6 @@
     {
       "command": "solid.cylinder",
       "params": {
-        "radius": "carousel_r",
         "height": "carousel_h",
         "base": [
           "cake_offset",
@@ -242,7 +241,8 @@
         "axis": "Z",
         "operation": "new",
         "name": "Carousel base",
-        "body_name": "carousel_base"
+        "body_name": "carousel_base",
+        "diameter": "carousel_d"
       }
     },
     {
@@ -257,7 +257,6 @@
     {
       "command": "solid.cylinder",
       "params": {
-        "radius": "column_r",
         "height": "column_h",
         "base": [
           "cake_offset",
@@ -267,7 +266,8 @@
         "axis": "Z",
         "operation": "new",
         "name": "Column",
-        "body_name": "column"
+        "body_name": "column",
+        "diameter": "column_d"
       }
     },
     {
@@ -282,7 +282,6 @@
     {
       "command": "solid.cylinder",
       "params": {
-        "radius": "brim_r",
         "height": "brim_h",
         "base": [
           "cake_offset",
@@ -292,7 +291,8 @@
         "axis": "Z",
         "operation": "new",
         "name": "Hat brim",
-        "body_name": "brim"
+        "body_name": "brim",
+        "diameter": "brim_d"
       }
     },
     {
@@ -307,7 +307,6 @@
     {
       "command": "solid.cone",
       "params": {
-        "radius": "roof_r",
         "height": "roof_h",
         "base": [
           "cake_offset",
@@ -318,7 +317,8 @@
         "operation": "new",
         "name": "Roof cone",
         "body_name": "roof",
-        "top_radius": "0 mm"
+        "diameter": "roof_d",
+        "top_diameter": "0 mm"
       }
     },
     {
