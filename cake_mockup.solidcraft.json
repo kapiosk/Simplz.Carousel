@@ -18,21 +18,21 @@
       "command": "parameters.add",
       "params": {
         "name": "plinth_h",
-        "expression": "40 mm"
+        "expression": "20 mm"
       }
     },
     {
       "command": "parameters.add",
       "params": {
         "name": "cake_offset",
-        "expression": "50 mm"
+        "expression": "0 mm"
       }
     },
     {
       "command": "parameters.add",
       "params": {
         "name": "tier1_r",
-        "expression": "200 mm"
+        "expression": "220 mm"
       }
     },
     {
@@ -109,7 +109,7 @@
       "command": "parameters.add",
       "params": {
         "name": "roof_h",
-        "expression": "70 mm"
+        "expression": "80 mm"
       }
     },
     {

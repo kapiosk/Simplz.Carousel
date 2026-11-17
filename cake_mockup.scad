@@ -13,12 +13,12 @@
 
 /* [Plinth] */
 plinth_r = 300;   // 30 cm
-plinth_h =  20;   //  4 cm
+plinth_h =  20;   //  2 cm
 
 /* [Cake] */
-// the cake sits off-centre on the plinth; everything above follows it
-cake_offset = 0; // 5 cm
-tier1_r  = 220;   // 20 cm
+// shift the cake off-centre on the plinth; everything above follows it
+cake_offset =   0; //  0 cm
+tier1_r  = 220;   // 22 cm
 tier1_h  = 150;   // 15 cm
 tier2_r  = 180;   // 18 cm
 tier2_h  = 150;   // 15 cm
@@ -31,7 +31,7 @@ column_h   = 130; // 13 cm
 brim_r     = 150; // 15 cm
 brim_h     =  20; //  2 cm
 roof_r     = 150; // 15 cm
-roof_h     =  80; //  7 cm
+roof_h     =  80; //  8 cm
 
 /* [View] */
 // slice the whole thing in half to read the stack
