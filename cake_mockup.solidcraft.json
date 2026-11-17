@@ -1,0 +1,334 @@
+{
+  "about": {
+    "design": "cake_mockup",
+    "format": "solidcraft/58",
+    "note": "Command script, NOT a design document. Replay it with:  solidcraft-cli run cake_mockup.solidcraft.json --save cake_mockup.sc   -- to open the model in the SolidCraft GUI, open cake_mockup.sc instead.",
+    "replay": "solidcraft-cli run cake_mockup.solidcraft.json",
+    "version": "0.44.1"
+  },
+  "commands": [
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "plinth_r",
+        "expression": "300 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "plinth_h",
+        "expression": "40 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "cake_offset",
+        "expression": "50 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "tier1_r",
+        "expression": "200 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "tier1_h",
+        "expression": "150 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "tier2_r",
+        "expression": "180 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "tier2_h",
+        "expression": "150 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "carousel_r",
+        "expression": "150 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "carousel_h",
+        "expression": "65 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "column_r",
+        "expression": "30 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "column_h",
+        "expression": "130 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "brim_r",
+        "expression": "150 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "brim_h",
+        "expression": "20 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "roof_r",
+        "expression": "150 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "roof_h",
+        "expression": "70 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "z_tier1",
+        "expression": "plinth_h"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "z_tier2",
+        "expression": "z_tier1 + tier1_h"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "z_carousel",
+        "expression": "z_tier2 + tier2_h"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "z_column",
+        "expression": "z_carousel + carousel_h"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "z_brim",
+        "expression": "z_column + column_h"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "z_roof",
+        "expression": "z_brim + brim_h"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "radius": "plinth_r",
+        "height": "plinth_h",
+        "base": [
+          0,
+          0,
+          "0 mm"
+        ],
+        "axis": "Z",
+        "operation": "new",
+        "name": "Plinth",
+        "body_name": "plinth"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "plinth"
+        ],
+        "color": "#dcdcdc"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "radius": "tier1_r",
+        "height": "tier1_h",
+        "base": [
+          "cake_offset",
+          0,
+          "z_tier1"
+        ],
+        "axis": "Z",
+        "operation": "new",
+        "name": "Cake tier 1",
+        "body_name": "tier1"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "tier1"
+        ],
+        "color": "#f5deb3"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "radius": "tier2_r",
+        "height": "tier2_h",
+        "base": [
+          "cake_offset",
+          0,
+          "z_tier2"
+        ],
+        "axis": "Z",
+        "operation": "new",
+        "name": "Cake tier 2",
+        "body_name": "tier2"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "tier2"
+        ],
+        "color": "#ffe4e1"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "radius": "carousel_r",
+        "height": "carousel_h",
+        "base": [
+          "cake_offset",
+          0,
+          "z_carousel"
+        ],
+        "axis": "Z",
+        "operation": "new",
+        "name": "Carousel base",
+        "body_name": "carousel_base"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "carousel_base"
+        ],
+        "color": "#4682b4"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "radius": "column_r",
+        "height": "column_h",
+        "base": [
+          "cake_offset",
+          0,
+          "z_column"
+        ],
+        "axis": "Z",
+        "operation": "new",
+        "name": "Column",
+        "body_name": "column"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "column"
+        ],
+        "color": "#c0c0c0"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "radius": "brim_r",
+        "height": "brim_h",
+        "base": [
+          "cake_offset",
+          0,
+          "z_brim"
+        ],
+        "axis": "Z",
+        "operation": "new",
+        "name": "Hat brim",
+        "body_name": "brim"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "brim"
+        ],
+        "color": "#ff6347"
+      }
+    },
+    {
+      "command": "solid.cone",
+      "params": {
+        "radius": "roof_r",
+        "height": "roof_h",
+        "base": [
+          "cake_offset",
+          0,
+          "z_roof"
+        ],
+        "axis": "Z",
+        "operation": "new",
+        "name": "Roof cone",
+        "body_name": "roof",
+        "top_radius": "0 mm"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "roof"
+        ],
+        "color": "#ff6347"
+      }
+    }
+  ]
+}
