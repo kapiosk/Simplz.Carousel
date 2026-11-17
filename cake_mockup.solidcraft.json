@@ -81,7 +81,7 @@
       "command": "parameters.add",
       "params": {
         "name": "column_h",
-        "expression": "130 mm"
+        "expression": "100 mm"
       }
     },
     {
@@ -109,7 +109,7 @@
       "command": "parameters.add",
       "params": {
         "name": "roof_h",
-        "expression": "80 mm"
+        "expression": "60 mm"
       }
     },
     {

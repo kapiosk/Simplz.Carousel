@@ -5,6 +5,8 @@ out/
 *.stp
 *.3mf
 *.png
+# ...except the final renders, kept for anyone without Blender
+!renders/*.png
 
 # FreeCAD
 *.FCStd
