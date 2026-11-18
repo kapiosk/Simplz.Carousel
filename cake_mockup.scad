@@ -33,6 +33,10 @@ brim_d     = 150; // Ø15 cm
 brim_h     =  20; //  2 cm
 roof_d     = 150; // Ø15 cm
 roof_h     =  70; //  7 cm
+// carousel_h is a hollow base under a deck disc (carousel_base.scad, the sketch's split)
+deck_h     =  15; // 1.5 cm deck on top
+base_wall  =  10; //  1 cm wall: Ø13 cm inside
+base_depth =  40; //  4 cm deep, so the floor is carousel_h - deck_h - base_depth
 
 /* [Horses] */
 horse_count  = 4;
@@ -64,8 +68,9 @@ saddle_profile = [[38,58],[39,66],[43,64],[50,63],[55,64],[58,67],[59,60],[56,52
 pole_at = 48;         // sketch x of the pole: through the middle of the saddle
 
 /* [View] */
-// the whole display, or one part on its own, standing on Z 0 (roof.scad picks "roof")
-part = "stack"; // [stack, roof]
+// the whole display, or one part on its own, standing on Z 0
+// (roof.scad picks "roof", carousel_base.scad "base")
+part = "stack"; // [stack, roof, base]
 // slice the whole thing in half to read the stack
 section = false;
 // show a single horse, side on, to judge its shape
@@ -81,6 +86,10 @@ z_column   = z_carousel + carousel_h;
 z_brim     = z_column + column_h;
 z_roof     = z_brim + brim_h;
 total_h    = z_roof + roof_h;
+base_h     = carousel_h - deck_h;         // the hollow base under the deck
+base_floor = base_h - base_depth;
+assert(base_floor > 0, "the carousel base's hollow goes through its floor");
+assert(2 * base_wall < carousel_d, "the carousel base's walls meet in the middle");
 
 echo(str("plinth top   ", z_tier1,    " mm"));
 echo(str("tier 1 top   ", z_tier2,    " mm"));
@@ -144,6 +153,17 @@ module roof() {
     }
 }
 
+// The carousel's base: a cup open at the top, standing on Z 0, the deck disc
+// (deck_h) sitting on it. The stack draws the two as one solid carousel_h block.
+module carousel_base() {
+    color("SteelBlue")
+        difference() {
+            cylinder(d = carousel_d, h = base_h);
+            translate([0, 0, base_floor])           // 1 mm past the rim, for a clean cut
+                cylinder(d = carousel_d - 2 * base_wall, h = base_depth + 1);
+        }
+}
+
 module stack() {
     color("Gainsboro")                                  // plinth
         cylinder(d = plinth_d, h = plinth_h);
@@ -166,6 +186,8 @@ module stack() {
 
 if (part == "roof")
     roof();
+else if (part == "base")
+    carousel_base();
 else if (horse_only)
     rotate([90, 0, 0]) {
         color("Ivory") linear_extrude(horse_t, center = true) polygon(fit(horse_sk));
