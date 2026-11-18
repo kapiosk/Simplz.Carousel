@@ -32,7 +32,7 @@ column_h   = 100; // 10 cm
 brim_d     = 150; // Ø15 cm
 brim_h     =  20; //  2 cm
 roof_d     = 150; // Ø15 cm
-roof_h     =  60; //  6 cm
+roof_h     =  70; //  7 cm
 
 /* [Horses] */
 horse_count  = 4;
@@ -64,6 +64,8 @@ saddle_profile = [[38,58],[39,66],[43,64],[50,63],[55,64],[58,67],[59,60],[56,52
 pole_at = 48;         // sketch x of the pole: through the middle of the saddle
 
 /* [View] */
+// the whole display, or one part on its own, standing on Z 0 (roof.scad picks "roof")
+part = "stack"; // [stack, roof]
 // slice the whole thing in half to read the stack
 section = false;
 // show a single horse, side on, to judge its shape
@@ -134,6 +136,14 @@ module horse(i) {
 }
 
 // =============================================================================
+// The carousel's hat: brim with the conical roof on it, one piece, standing on Z 0.
+module roof() {
+    color("Tomato") {
+        cylinder(d = brim_d, h = brim_h);
+        translate([0, 0, brim_h]) cylinder(d1 = roof_d, d2 = 0, h = roof_h);
+    }
+}
+
 module stack() {
     color("Gainsboro")                                  // plinth
         cylinder(d = plinth_d, h = plinth_h);
@@ -148,16 +158,15 @@ module stack() {
             translate([0, 0, z_carousel]) cylinder(d = carousel_d, h = carousel_h);
         color("Silver")                                 // column
             translate([0, 0, z_column]) cylinder(d = column_d, h = column_h);
-        color("Tomato")                                 // hat brim
-            translate([0, 0, z_brim]) cylinder(d = brim_d, h = brim_h);
-        color("Tomato")                                 // conical roof
-            translate([0, 0, z_roof]) cylinder(d1 = roof_d, d2 = 0, h = roof_h);
+        translate([0, 0, z_brim]) roof();               // hat brim + conical roof
 
         for (i = [0 : horse_count - 1]) horse(i);
     }
 }
 
-if (horse_only)
+if (part == "roof")
+    roof();
+else if (horse_only)
     rotate([90, 0, 0]) {
         color("Ivory") linear_extrude(horse_t, center = true) polygon(fit(horse_sk));
         color("Crimson") linear_extrude(horse_t + 3, center = true)

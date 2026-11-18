@@ -1,0 +1,487 @@
+{
+  "about": {
+    "design": "carousel_parts",
+    "format": "solidcraft/58",
+    "note": "Command script, NOT a design document: the carousel's parts from 'Carousel dimensions' (all x3), sized with cake_mockup.scad's numbers, every size a DIAMETER. Replay with:  solidcraft-cli run carousel_parts.solidcraft.json --save carousel_parts.sc   -- to open the model in the SolidCraft GUI, open carousel_parts.sc instead.",
+    "replay": "solidcraft-cli run carousel_parts.solidcraft.json",
+    "version": "0.44.1"
+  },
+  "commands": [
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "plinth_d",
+        "expression": "300 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "plinth_h",
+        "expression": "20 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "carousel_d",
+        "expression": "150 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "carousel_h",
+        "expression": "65 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "column_d",
+        "expression": "30 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "column_h",
+        "expression": "100 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "brim_d",
+        "expression": "150 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "brim_h",
+        "expression": "20 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "roof_d",
+        "expression": "150 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "roof_h",
+        "expression": "70 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "deck_h",
+        "expression": "15 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "base_h",
+        "expression": "carousel_h - deck_h"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "base_wall",
+        "expression": "10 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "base_depth",
+        "expression": "40 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "copies_gap",
+        "expression": "40 mm"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "pitch",
+        "expression": "carousel_d + copies_gap"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "plinth_pitch",
+        "expression": "plinth_d + copies_gap"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "y_base",
+        "expression": "plinth_d / 2 + copies_gap + carousel_d / 2"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "y_deck",
+        "expression": "y_base + carousel_d + copies_gap"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "y_column",
+        "expression": "y_deck + carousel_d / 2 + copies_gap + column_d / 2"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "y_roof",
+        "expression": "y_column + column_d / 2 + copies_gap + roof_d / 2"
+      }
+    },
+    {
+      "command": "parameters.add",
+      "params": {
+        "name": "x_small",
+        "expression": "plinth_pitch - pitch"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "operation": "new",
+        "name": "Plinth",
+        "body_name": "plinth 1",
+        "diameter": "plinth_d",
+        "height": "plinth_h",
+        "base": [
+          0,
+          0,
+          "0 mm"
+        ],
+        "axis": "Z"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "operation": "new",
+        "name": "Carousel base",
+        "body_name": "carousel base 1",
+        "diameter": "carousel_d",
+        "height": "base_h",
+        "base": [
+          "x_small",
+          "y_base",
+          "0 mm"
+        ],
+        "axis": "Z"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "operation": "cut",
+        "targets": [
+          "carousel base 1"
+        ],
+        "name": "Carousel base hollow",
+        "diameter": "carousel_d - 2 * base_wall",
+        "height": "base_depth + 1 mm",
+        "base": [
+          "x_small",
+          "y_base",
+          "base_h - base_depth"
+        ],
+        "axis": "Z"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "operation": "new",
+        "name": "Deck",
+        "body_name": "deck 1",
+        "diameter": "carousel_d",
+        "height": "deck_h",
+        "base": [
+          "x_small",
+          "y_deck",
+          "0 mm"
+        ],
+        "axis": "Z"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "operation": "new",
+        "name": "Column",
+        "body_name": "column 1",
+        "diameter": "column_d",
+        "height": "column_h",
+        "base": [
+          "x_small",
+          "y_column",
+          "0 mm"
+        ],
+        "axis": "Z"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "operation": "new",
+        "name": "Hat brim",
+        "body_name": "roof 1",
+        "diameter": "brim_d",
+        "height": "brim_h",
+        "base": [
+          "x_small",
+          "y_roof",
+          "0 mm"
+        ],
+        "axis": "Z"
+      }
+    },
+    {
+      "command": "solid.cone",
+      "params": {
+        "operation": "join",
+        "targets": [
+          "roof 1"
+        ],
+        "name": "Roof cone",
+        "diameter": "roof_d",
+        "top_diameter": "0 mm",
+        "height": "roof_h",
+        "base": [
+          "x_small",
+          "y_roof",
+          "brim_h"
+        ],
+        "axis": "Z"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "plinth 1"
+        ],
+        "color": "#dcdcdc"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "plinth 1"
+        ],
+        "copy": true,
+        "translate": [
+          "1 * plinth_pitch",
+          0,
+          0
+        ],
+        "name": "plinth copy 2",
+        "body_name": "plinth 2"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "plinth 1"
+        ],
+        "copy": true,
+        "translate": [
+          "2 * plinth_pitch",
+          0,
+          0
+        ],
+        "name": "plinth copy 3",
+        "body_name": "plinth 3"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "carousel base 1"
+        ],
+        "color": "#4682b4"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "carousel base 1"
+        ],
+        "copy": true,
+        "translate": [
+          "1 * pitch",
+          0,
+          0
+        ],
+        "name": "carousel base copy 2",
+        "body_name": "carousel base 2"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "carousel base 1"
+        ],
+        "copy": true,
+        "translate": [
+          "2 * pitch",
+          0,
+          0
+        ],
+        "name": "carousel base copy 3",
+        "body_name": "carousel base 3"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "deck 1"
+        ],
+        "color": "#4682b4"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "deck 1"
+        ],
+        "copy": true,
+        "translate": [
+          "1 * pitch",
+          0,
+          0
+        ],
+        "name": "deck copy 2",
+        "body_name": "deck 2"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "deck 1"
+        ],
+        "copy": true,
+        "translate": [
+          "2 * pitch",
+          0,
+          0
+        ],
+        "name": "deck copy 3",
+        "body_name": "deck 3"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "column 1"
+        ],
+        "color": "#c0c0c0"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "column 1"
+        ],
+        "copy": true,
+        "translate": [
+          "1 * pitch",
+          0,
+          0
+        ],
+        "name": "column copy 2",
+        "body_name": "column 2"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "column 1"
+        ],
+        "copy": true,
+        "translate": [
+          "2 * pitch",
+          0,
+          0
+        ],
+        "name": "column copy 3",
+        "body_name": "column 3"
+      }
+    },
+    {
+      "command": "appearance.assign",
+      "params": {
+        "bodies": [
+          "roof 1"
+        ],
+        "color": "#ff6347"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "roof 1"
+        ],
+        "copy": true,
+        "translate": [
+          "1 * pitch",
+          0,
+          0
+        ],
+        "name": "roof copy 2",
+        "body_name": "roof 2"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "roof 1"
+        ],
+        "copy": true,
+        "translate": [
+          "2 * pitch",
+          0,
+          0
+        ],
+        "name": "roof copy 3",
+        "body_name": "roof 3"
+      }
+    }
+  ]
+}
