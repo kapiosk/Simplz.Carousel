@@ -109,7 +109,7 @@
       "command": "parameters.add",
       "params": {
         "name": "roof_h",
-        "expression": "60 mm"
+        "expression": "70 mm"
       }
     },
     {
